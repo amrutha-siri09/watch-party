@@ -1,0 +1,48 @@
+{
+  "test-room-1792052691930": {
+    "videoUrl": "",
+    "isPlaying": false,
+    "currentTime": 0,
+    "updatedAt": 1792052691936,
+    "playlist": [],
+    "poll": null
+  },
+  "host-test-1792052692170": {
+    "videoUrl": "",
+    "isPlaying": false,
+    "currentTime": 0,
+    "updatedAt": 1792052692171,
+    "playlist": [
+      {
+        "id": "1792052692174-ba31aa",
+        "title": "Demo video",
+        "url": "https://example.com/video.mp4",
+        "addedBy": "Host"
+      }
+    ],
+    "poll": null
+  },
+  "test-room-1792052959099": {
+    "videoUrl": "",
+    "isPlaying": false,
+    "currentTime": 0,
+    "updatedAt": 1792052959110,
+    "playlist": [],
+    "poll": null
+  },
+  "host-test-1792052959369": {
+    "videoUrl": "",
+    "isPlaying": false,
+    "currentTime": 0,
+    "updatedAt": 1792052959369,
+    "playlist": [
+      {
+        "id": "1792052959374-7489c4",
+        "title": "Demo video",
+        "url": "https://example.com/video.mp4",
+        "addedBy": "Host"
+      }
+    ],
+    "poll": null
+  }
+}
