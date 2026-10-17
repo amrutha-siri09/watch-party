@@ -46,7 +46,8 @@ let currentProvider = "file";
 let youtubePlayer = null;
 let youtubeApiReady = false;
 let pendingYoutube = null;
-const youtubeContainer = $("youtubePlayer");
+const youtubeContainer = $("youtubePlayerWrap");
+const removeVideoButton = $("removeVideo");
 const youtubeControls = $("youtubeControls");
 
 function getYoutubeId(value) {
@@ -111,7 +112,7 @@ function getCurrentTime() {
 function showVideo(url, time = 0, shouldPlay = false) {
   if (!url) {
     currentProvider = "file";
-    video.hidden = true; stage.hidden = false; youtubeContainer.hidden = true; youtubeControls.hidden = true;
+    video.hidden = true; stage.hidden = false; youtubeContainer.hidden = true; youtubeControls.hidden = true; removeVideoButton.hidden = true;
     video.removeAttribute("src"); video.load();
     if (youtubePlayer && typeof youtubePlayer.stopVideo === "function") youtubePlayer.stopVideo();
     $("syncStatus").textContent = "Waiting for a video";
@@ -121,15 +122,15 @@ function showVideo(url, time = 0, shouldPlay = false) {
   const youtubeId = getYoutubeId(url);
   if (youtubeId) {
     currentProvider = "youtube";
-    video.pause(); video.hidden = true; video.removeAttribute("src");
-    stage.hidden = true; youtubeContainer.hidden = false;
+    video.pause(); video.hidden = true; video.removeAttribute("src"); video.load();
+    stage.hidden = true; youtubeContainer.hidden = false; removeVideoButton.hidden = hostId !== socket.id;
     youtubeControls.hidden = hostId !== socket.id;
     createYoutubePlayer(youtubeId, time, shouldPlay);
     $("syncStatus").textContent = "YouTube video loaded";
     return;
   }
   currentProvider = "file";
-  youtubeContainer.hidden = true; youtubeControls.hidden = true;
+  youtubeContainer.hidden = true; youtubeControls.hidden = true; removeVideoButton.hidden = hostId !== socket.id;
   if (youtubePlayer && typeof youtubePlayer.stopVideo === "function") youtubePlayer.stopVideo();
   const changed = video.src !== url;
   stage.hidden = true; video.hidden = false;
@@ -155,9 +156,14 @@ $("videoForm").addEventListener("submit", (e) => {
   }
   socket.emit("set-video", { videoUrl });
 });
+removeVideoButton.addEventListener("click", () => {
+  if (hostId !== socket.id) { toast("Only the host can remove the shared video."); return; }
+  socket.emit("set-video", { videoUrl: "" });
+});
 socket.on("video-updated", ({ videoUrl, isPlaying, currentTime }) => {
   $("videoUrl").value = videoUrl || "";
   showVideo(videoUrl, currentTime || 0, !!isPlaying);
+  removeVideoButton.hidden = !videoUrl || hostId !== socket.id;
   toast(videoUrl ? "Shared video updated for everyone." : "Video cleared.");
 });
 video.addEventListener("play", () => {
@@ -253,6 +259,7 @@ function renderPeople(users) {
   $("transferHost").disabled = hostId !== socket.id || roomUsers.filter(u => u.id !== socket.id).length === 0;
   video.controls = hostId === socket.id;
   youtubeControls.hidden = currentProvider !== "youtube" || hostId !== socket.id;
+  removeVideoButton.hidden = !room.videoUrl || hostId !== socket.id;
 }
 socket.on("users-updated", renderPeople);
 socket.on("host-updated", (id) => { hostId = id; renderPeople(roomUsers); });
