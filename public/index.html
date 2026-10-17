@@ -36,15 +36,17 @@
             <div id="videoStage" class="video-stage">
               <div class="stage-glow"></div><div class="play-mark">▶</div>
               <h3>Pick a video. Invite your crew.</h3>
-              <p>Use a direct MP4/WebM video link below to enable synced playback.</p>
+              <p>Paste a YouTube link or a direct MP4/WebM video link below to watch together.</p>
             </div>
             <video id="videoPlayer" controls playsinline hidden></video>
+            <div id="youtubePlayer" class="youtube-player" hidden></div>
+            <div id="youtubeControls" class="youtube-controls" hidden><button id="ytBack" type="button">−10 sec</button><button id="ytPlayPause" type="button">Play / Pause</button><button id="ytForward" type="button">+10 sec</button></div>
             <div class="player-footer"><span><span class="live-dot"></span> SYNCED ROOM</span><span id="syncStatus">Waiting for a video</span></div>
           </div>
           <div class="video-input card">
-            <div class="input-title"><div class="mini-icon">↗</div><div><h3>Choose what to watch</h3><p>Paste a direct video URL that everyone in the room can access.</p></div></div>
-            <form id="videoForm"><input id="videoUrl" type="url" placeholder="https://example.com/movie.mp4" required><button class="primary-button">Load video</button></form>
-            <p class="hint">For this demo, use a direct .mp4 or .webm URL. YouTube and subscription streaming sites need their own permitted player integrations.</p>
+            <div class="input-title"><div class="mini-icon">↗</div><div><h3>Choose what to watch</h3><p>Paste a YouTube link or a direct video URL that everyone in the room can access.</p></div></div>
+            <form id="videoForm"><input id="videoUrl" type="url" placeholder="https://www.youtube.com/watch?v=... or https://example.com/video.mp4" required><button class="primary-button">Load video</button></form>
+            <p class="hint">YouTube links and direct MP4/WebM files are supported. Some YouTube videos block embedding. Subscription streaming sites need their own permitted integration.</p>
           </div>
 
 
@@ -64,7 +66,7 @@
           <div class="lower-grid">
             <section class="card panel">
               <div class="panel-heading"><div><div class="mini-icon purple">☷</div><h3>Group playlist</h3></div><span class="count-badge" id="playlistCount">0</span></div>
-              <form id="playlistForm" class="stack-form"><input id="playlistTitle" placeholder="Video / movie title" required><input id="playlistUrl" type="url" placeholder="Direct video URL" required><button class="secondary-button">Add to playlist +</button></form>
+              <form id="playlistForm" class="stack-form"><input id="playlistTitle" placeholder="Video / movie title" required><input id="playlistUrl" type="url" placeholder="YouTube link or direct MP4/WebM URL" required><button class="secondary-button">Add to playlist +</button></form>
               <div id="playlistItems" class="playlist-items empty-note">Your group's watchlist will appear here.</div>
             </section>
             <section class="card panel">

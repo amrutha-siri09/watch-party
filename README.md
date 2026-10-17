@@ -36,7 +36,7 @@ Room state is stored in `data/rooms.json`. Playlists, poll question/options/vote
 
 Only the current host can set the shared video, seek, play/pause through server synchronization, or start a playlist item. If the host disconnects, the next connected participant becomes host. Drift is corrected by seeking when it is large and briefly adjusting playback speed when it is small. Browser autoplay policies, buffering, media duration and network latency can still affect synchronization.
 
-Use direct MP4/WebM URLs that you own or are allowed to access. The app does not bypass DRM, subscriptions or access controls. YouTube and subscription services need their own permitted player integrations.
+Use direct MP4/WebM URLs that you own or are allowed to access. YouTube watch, youtu.be, shorts, live and embed links are also supported through the official YouTube IFrame Player API. Some videos disable embedding, and browser autoplay restrictions may require a viewer to press play. The app does not bypass DRM, subscriptions or access controls; subscription streaming services need their own permitted integrations.
 
 ## Capacity, validation and security notes
 

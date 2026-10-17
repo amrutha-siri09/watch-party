@@ -42,18 +42,99 @@ $("copyInvite").addEventListener("click", async () => {
   catch { prompt("Copy this invite link:", link); }
 });
 
+let currentProvider = "file";
+let youtubePlayer = null;
+let youtubeApiReady = false;
+let pendingYoutube = null;
+const youtubeContainer = $("youtubePlayer");
+const youtubeControls = $("youtubeControls");
+
+function getYoutubeId(value) {
+  try {
+    const u = new URL(value);
+    const host = u.hostname.toLowerCase().replace(/^www\./, "");
+    let id = "";
+    if (host === "youtu.be") id = u.pathname.split("/").filter(Boolean)[0] || "";
+    else if (["youtube.com", "m.youtube.com", "youtube-nocookie.com"].includes(host)) {
+      if (u.pathname === "/watch") id = u.searchParams.get("v") || "";
+      else if (/^\/(embed|shorts|live)\//.test(u.pathname)) id = u.pathname.split("/")[2] || "";
+    }
+    return /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null;
+  } catch { return null; }
+}
+function isYoutubeUrl(value) { return Boolean(getYoutubeId(value)); }
+function createYoutubePlayer(videoId, time = 0, shouldPlay = false) {
+  pendingYoutube = { videoId, time, shouldPlay };
+  if (!youtubeApiReady) return;
+  if (!youtubePlayer) {
+    youtubePlayer = new YT.Player("youtubePlayer", {
+      width: "100%", height: "100%", videoId,
+      playerVars: { playsinline: 1, controls: 0, rel: 0, enablejsapi: 1 },
+      events: {
+        onReady: (event) => {
+          const pending = pendingYoutube;
+          if (!pending) return;
+          lastSyncAt = Date.now();
+          if (pending.shouldPlay) event.target.loadVideoById({ videoId: pending.videoId, startSeconds: pending.time });
+          else event.target.cueVideoById({ videoId: pending.videoId, startSeconds: pending.time });
+          setTimeout(() => { lastSyncAt = 0; }, 1000);
+        },
+        onStateChange: (event) => {
+          if (Date.now() - lastSyncAt < 900 || hostId !== socket.id) return;
+          const state = event.data;
+          if (state === YT.PlayerState.PLAYING || state === YT.PlayerState.PAUSED) {
+            socket.emit("playback", { action: state === YT.PlayerState.PLAYING ? "play" : "pause", currentTime: event.target.getCurrentTime() || 0 });
+          }
+        },
+        onError: () => toast("This YouTube video may not allow embedding. Try another video.")
+      }
+    });
+  } else {
+    lastSyncAt = Date.now();
+    if (shouldPlay) youtubePlayer.loadVideoById({ videoId, startSeconds: time });
+    else youtubePlayer.cueVideoById({ videoId, startSeconds: time });
+    setTimeout(() => { lastSyncAt = 0; }, 1000);
+  }
+}
+window.onYouTubeIframeAPIReady = function () {
+  youtubeApiReady = true;
+  if (pendingYoutube) createYoutubePlayer(pendingYoutube.videoId, pendingYoutube.time, pendingYoutube.shouldPlay);
+};
+const youtubeApiScript = document.createElement("script");
+youtubeApiScript.src = "https://www.youtube.com/iframe_api";
+youtubeApiScript.async = true;
+document.head.appendChild(youtubeApiScript);
+function getCurrentTime() {
+  if (currentProvider === "youtube" && youtubePlayer && typeof youtubePlayer.getCurrentTime === "function") return youtubePlayer.getCurrentTime() || 0;
+  return video.currentTime || 0;
+}
 function showVideo(url, time = 0, shouldPlay = false) {
   if (!url) {
-    video.hidden = true; stage.hidden = false; video.removeAttribute("src"); video.load();
+    currentProvider = "file";
+    video.hidden = true; stage.hidden = false; youtubeContainer.hidden = true; youtubeControls.hidden = true;
+    video.removeAttribute("src"); video.load();
+    if (youtubePlayer && typeof youtubePlayer.stopVideo === "function") youtubePlayer.stopVideo();
     $("syncStatus").textContent = "Waiting for a video";
     return;
   }
   if (!/^https?:\/\//i.test(url)) { toast("Please use a valid http(s) video URL."); return; }
+  const youtubeId = getYoutubeId(url);
+  if (youtubeId) {
+    currentProvider = "youtube";
+    video.pause(); video.hidden = true; video.removeAttribute("src");
+    stage.hidden = true; youtubeContainer.hidden = false;
+    youtubeControls.hidden = hostId !== socket.id;
+    createYoutubePlayer(youtubeId, time, shouldPlay);
+    $("syncStatus").textContent = "YouTube video loaded";
+    return;
+  }
+  currentProvider = "file";
+  youtubeContainer.hidden = true; youtubeControls.hidden = true;
+  if (youtubePlayer && typeof youtubePlayer.stopVideo === "function") youtubePlayer.stopVideo();
   const changed = video.src !== url;
   stage.hidden = true; video.hidden = false;
   if (changed) {
-    video.src = url;
-    video.load();
+    video.src = url; video.load();
     video.addEventListener("loadedmetadata", function onLoaded() {
       video.removeEventListener("loadedmetadata", onLoaded);
       if (Number.isFinite(time)) video.currentTime = time;
@@ -61,8 +142,7 @@ function showVideo(url, time = 0, shouldPlay = false) {
     });
   } else {
     try { video.currentTime = time; } catch {}
-    if (shouldPlay) video.play().catch(() => {});
-    else video.pause();
+    if (shouldPlay) video.play().catch(() => {}); else video.pause();
   }
   $("syncStatus").textContent = "Video loaded";
 }
@@ -70,6 +150,9 @@ $("videoForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const videoUrl = $("videoUrl").value.trim();
   if (!videoUrl) return;
+  if (!/^https?:\/\//i.test(videoUrl) || (!isYoutubeUrl(videoUrl) && !/\.(mp4|webm)(?:$|[?#])/i.test(videoUrl))) {
+    toast("Use a YouTube link or a direct MP4/WebM link."); return;
+  }
   socket.emit("set-video", { videoUrl });
 });
 socket.on("video-updated", ({ videoUrl, isPlaying, currentTime }) => {
@@ -78,43 +161,56 @@ socket.on("video-updated", ({ videoUrl, isPlaying, currentTime }) => {
   toast(videoUrl ? "Shared video updated for everyone." : "Video cleared.");
 });
 video.addEventListener("play", () => {
-  if (Date.now() - lastSyncAt < 800) return;
+  if (currentProvider !== "file" || Date.now() - lastSyncAt < 800) return;
   socket.emit("playback", { action: "play", currentTime: video.currentTime });
 });
 video.addEventListener("pause", () => {
-  if (video.ended || Date.now() - lastSyncAt < 800) return;
+  if (currentProvider !== "file" || video.ended || Date.now() - lastSyncAt < 800) return;
   socket.emit("playback", { action: "pause", currentTime: video.currentTime });
 });
 video.addEventListener("seeked", () => {
-  if (Date.now() - lastSyncAt < 800) return;
+  if (currentProvider !== "file" || Date.now() - lastSyncAt < 800) return;
   socket.emit("seek", { currentTime: video.currentTime });
 });
 function applySync(currentTime, shouldPlay, updatedAt = Date.now()) {
-  if (video.hidden || !video.src) return;
   const target = Math.max(0, currentTime + (shouldPlay ? Math.max(0, (Date.now() - updatedAt) / 1000) : 0));
-  const drift = target - video.currentTime;
   lastSyncAt = Date.now();
-  if (Math.abs(drift) > 1.25) {
-    try { video.currentTime = target; } catch {}
-    video.playbackRate = 1;
-  } else if (Math.abs(drift) > 0.12 && shouldPlay) {
-    video.playbackRate = drift > 0 ? 1.05 : 0.95;
-    setTimeout(() => { video.playbackRate = 1; }, 1200);
-  } else video.playbackRate = 1;
-  if (shouldPlay) video.play().catch(() => toast("Press play to allow playback in this browser."));
-  else video.pause();
-  $("syncStatus").textContent = Math.abs(drift) > 1.25 ? "Correcting playback drift…" : "Synced with room";
+  if (currentProvider === "youtube" && youtubePlayer && typeof youtubePlayer.seekTo === "function") {
+    youtubePlayer.seekTo(target, true);
+    if (shouldPlay) youtubePlayer.playVideo(); else youtubePlayer.pauseVideo();
+  } else if (!video.hidden && video.src) {
+    const drift = target - video.currentTime;
+    if (Math.abs(drift) > 1.25) { try { video.currentTime = target; } catch {} video.playbackRate = 1; }
+    else if (Math.abs(drift) > 0.12 && shouldPlay) {
+      video.playbackRate = drift > 0 ? 1.05 : 0.95;
+      setTimeout(() => { video.playbackRate = 1; }, 1200);
+    } else video.playbackRate = 1;
+    if (shouldPlay) video.play().catch(() => toast("Press play to allow playback in this browser.")); else video.pause();
+  }
+  $("syncStatus").textContent = "Synced with room";
   setTimeout(() => { lastSyncAt = 0; }, 900);
 }
 socket.on("playback-updated", ({ action, currentTime, updatedAt }) => applySync(currentTime, action === "play", updatedAt));
 socket.on("seek-updated", ({ currentTime }) => {
   lastSyncAt = Date.now();
-  if (!video.hidden && video.src && Math.abs(video.currentTime - currentTime) > 0.12) {
-    try { video.currentTime = currentTime; } catch {}
-  }
+  if (currentProvider === "youtube" && youtubePlayer && typeof youtubePlayer.seekTo === "function") youtubePlayer.seekTo(currentTime, true);
+  else if (!video.hidden && video.src && Math.abs(video.currentTime - currentTime) > 0.12) { try { video.currentTime = currentTime; } catch {} }
   video.playbackRate = 1;
   $("syncStatus").textContent = "Synced with room";
   setTimeout(() => { lastSyncAt = 0; }, 900);
+});
+$("ytPlayPause").addEventListener("click", () => {
+  if (hostId !== socket.id || !youtubePlayer) return;
+  const state = youtubePlayer.getPlayerState();
+  if (state === YT.PlayerState.PLAYING) youtubePlayer.pauseVideo(); else youtubePlayer.playVideo();
+});
+$("ytBack").addEventListener("click", () => {
+  if (hostId !== socket.id || !youtubePlayer) return;
+  const time = Math.max(0, getCurrentTime() - 10); youtubePlayer.seekTo(time, true); socket.emit("seek", { currentTime: time });
+});
+$("ytForward").addEventListener("click", () => {
+  if (hostId !== socket.id || !youtubePlayer) return;
+  const time = getCurrentTime() + 10; youtubePlayer.seekTo(time, true); socket.emit("seek", { currentTime: time });
 });
 
 function addChatMessage({ username: name, text, at }) {
@@ -156,6 +252,7 @@ function renderPeople(users) {
   $("peopleList").innerHTML = roomUsers.map(u => `<div class="person-row"><span class="avatar">${escapeHtml(u.username.slice(0, 1).toUpperCase())}</span><span class="person-name">${escapeHtml(u.username)}${u.id === socket.id ? " (you)" : ""}</span>${u.id === hostId ? '<span class="host-tag">HOST</span>' : ""}</div>`).join("");
   $("transferHost").disabled = hostId !== socket.id || roomUsers.filter(u => u.id !== socket.id).length === 0;
   video.controls = hostId === socket.id;
+  youtubeControls.hidden = currentProvider !== "youtube" || hostId !== socket.id;
 }
 socket.on("users-updated", renderPeople);
 socket.on("host-updated", (id) => { hostId = id; renderPeople(roomUsers); });
@@ -233,7 +330,7 @@ async function loadMovies() {
       if (!movie) return;
       $("playlistTitle").value = movie.title;
       $("playlistTitle").focus();
-      toast("Title copied. Add a direct video URL to finish the playlist item.");
+      toast("Title copied. Add a YouTube or direct video URL to finish the playlist item.");
       $("playlistTitle").scrollIntoView({behavior:"smooth",block:"center"});
     }));
   } catch { target.innerHTML = '<p class="empty-note">Could not load movies. Check that the server is running.</p>'; }
